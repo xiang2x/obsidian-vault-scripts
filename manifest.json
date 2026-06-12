@@ -1,9 +1,9 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "vault-scripts",
+	"name": "Vault Scripts",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "{placeholder}",
+	"description": "compile and run ts/esm files in obsidian",
 	"author": "xjiaxiang86@gmail.com",
 	"authorUrl": "https://github.com/xjiaxiang",
 	"fundingUrl": "",
