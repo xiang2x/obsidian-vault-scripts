@@ -36,15 +36,16 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: npm install -g pnpm
 
-      - name: Install dependencies and build
+      - name: Install dependencies, build, and package release zip
         if: ${{ steps.release.outputs.release_created }}
         run: |
           pnpm install --frozen-lockfile
           pnpm run build
-          echo "${{ steps.release.outputs.tag_name }}"
+          pnpm run package:release
+          echo "Release tag: ${{ steps.release.outputs.tag_name }}"
 
       - name: Upload Release Artifact
         if: ${{ steps.release.outputs.release_created }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ steps.release.outputs.tag_name }} ./dist/main.js ./dist/manifest.json ./dist/styles.css
+        run: gh release upload ${{ steps.release.outputs.tag_name }} ./dist/vault-scripts-*.zip --clobber

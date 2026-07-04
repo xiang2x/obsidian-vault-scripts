@@ -1,4 +1,4 @@
 export default {
-	'*.md': ['prettier --write'],
-	'*.{ts,js,cjs,mjs,tsx}': ['oxlint && eslint'],
+  '*.md': ['oxfmt'],
+  '*.{ts,js,cjs,mjs,tsx}': ['oxlint'],
 };

@@ -7,9 +7,13 @@
 	"author": "xjiaxiang86@gmail.com",
 	"type": "module",
 	"main": "main.js",
+	"imports": {
+		"#/*": "./src/*"
+	},
 	"scripts": {
 		"dev": "vite build --watch",
-		"build": "vite build && cp manifest.json dist/",
+		"build": "vite build && cp manifest.json dist/ && node scripts/copy-esbuild-wasm.mjs",
+		"package:release": "node scripts/package-release.mjs",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "oxlint",
 		"lint:fix": "oxlint --fix",
@@ -25,6 +29,7 @@
 		"@types/node": "25.6.0",
 		"builtin-modules": "5.1.0",
 		"husky": "9.1.7",
+		"jsdom": "^29.1.1",
 		"lint-staged": "17.0.7",
 		"memfs": "4.57.2",
 		"obsidian": "latest",
@@ -46,5 +51,9 @@
 		"node": ">=24",
 		"pnpm": ">=11.5.3"
 	},
-	"packageManager": "pnpm@11.5.3"
+	"packageManager": "pnpm@11.5.3",
+	"dependencies": {
+		"esbuild-wasm": "0.28.0",
+		"zod": "4.4.3"
+	}
 }

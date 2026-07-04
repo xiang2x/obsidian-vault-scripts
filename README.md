@@ -1,94 +1,196 @@
-# Obsidian Sample Plugin
+# Vault Scripts
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Write TypeScript/ESM in your vault, compile on desktop, call compiled scripts from dataview, Templater, and the command palette via `window.vs`.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+[中文文档](./README.zh-CN.md)
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## What it does
 
-## First time developing plugins?
+- **Desktop**: esbuild watch compiles `{scriptsRoot}/src/**/*.ts` to `.obsidian/plugins/vault-scripts/dist/`
+- **Desktop & Mobile**: load compiled scripts through a lazy proxy — `await window.vs.<ExportName>.<method>(...)`
+- **Modules**: use `import`/`export` and `_`-prefixed internal folders (not separate entries)
+- **Commands**: classes with `static invoke(app)` register palette commands automatically
 
-Quick starting guide for new plugin devs:
+Compile runs **only on desktop** (`Platform.isDesktopApp`). Mobile reads synced `dist/` and does not compile.
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+## Install
 
-## Releasing new releases
+Releases include `esbuild-wasm/` (~14MB), which **cannot** be delivered completely through the Obsidian community plugin catalog or BRAT. Install manually from the release zip.
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+### From GitHub Release (recommended)
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+1. Open [Releases](https://github.com/xiang2x/obsidian-vault-scripts/releases) and download `vault-scripts-x.y.z.zip` for your version.
+2. Unzip **into** your vault plugins folder (do not add an extra nesting level):
 
-## Adding your plugin to the community plugin list
+   ```
+   <Vault>/.obsidian/plugins/
+   ```
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+   After unzip you should have:
 
-## How to use
+   ```
+   <Vault>/.obsidian/plugins/vault-scripts/
+     main.js
+     manifest.json
+     esbuild-wasm/          ← required for desktop compile
+       lib/main.js
+       bin/esbuild
+       esbuild.wasm
+       ...
+   ```
 
-- Clone this repo.
-- Make sure your NodeJS is at least v16 (`node --version`).
-- `npm i` or `yarn` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+3. Open **Settings → Community plugins**, enable **Vault Scripts**, and reload Obsidian.
 
-## Manually installing the plugin
+> Copying only `main.js` and `manifest.json` without `esbuild-wasm/` will break desktop compile.
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+### From source (development)
 
-## Improve code quality with eslint (optional)
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code. 
-- To use eslint with this project, make sure to install eslint from terminal:
-  - `npm install -g eslint`
-- To use eslint to analyze this project use this command:
-  - `eslint main.ts`
-  - eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder:
-  - `eslint .\src\`
+```bash
+pnpm install
+pnpm run build
+```
 
-## Funding URL
+Copy the **entire** `dist/` output into your vault:
 
-You can include funding URLs where people who use your plugin can financially support it.
+```
+<Vault>/.obsidian/plugins/vault-scripts/
+  main.js
+  manifest.json
+  esbuild-wasm/          ← required (~14MB)
+    lib/main.js
+    bin/esbuild
+    esbuild.wasm
+    ...
+```
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+Enable **Vault Scripts** under **Settings → Community plugins**, then reload Obsidian.
 
-```json
-{
-    "fundingUrl": "https://buymeacoffee.com"
+> Do not copy only `main.js` and `manifest.json` — desktop compile needs the `esbuild-wasm/` folder beside them.
+
+### Scripts folder in vault
+
+Default **Scripts root** is `scripts` (vault-relative). Expected layout:
+
+```
+scripts/
+  src/
+    project-report.ts      ← entry → vs.ProjectReport
+    actions/
+      create-project.ts    ← entry → vs.CreateProject
+    _utils/
+      helpers.ts           ← internal (bundled, not an entry)
+```
+
+Copy [fixtures/scripts](./fixtures/scripts/) as a starting point, or create your own `src/` tree.
+
+Configure **Settings → Vault Scripts → Scripts root** if you use a different path (e.g. `900-vault/scripts-v2`).
+
+## Quick start
+
+1. Set **Scripts root** and ensure `src/` exists.
+2. On desktop, save a `.ts` file under `src/` — watch rebuilds `dist/` automatically.
+3. In dataviewjs:
+
+```dataviewjs
+await window.vs.ProjectReport.render(dv.container, { title: "Weekly status" });
+```
+
+4. Or run **Vault Scripts: CreateProject** from the command palette, or in Templater:
+
+```javascript
+<%*
+await window.vs.CreateProject.invoke(app);
+%>
+```
+
+## User script conventions
+
+| Pattern                | Export                                           | Call                                       |
+| ---------------------- | ------------------------------------------------ | ------------------------------------------ |
+| Report / utility class | `export class X { static foo() {} }`             | `await vs.X.foo(...)`                      |
+| Function export        | `export function X() {}`                         | `await vs.X(...)`                          |
+| Command / automation   | `export class X { static async invoke(app) {} }` | `await vs.X.invoke(app)` + command palette |
+
+Rules:
+
+- **Entry files**: `.ts` / `.mts` / `.mjs` under `src/`, not under `_` folders, not `*.d.ts` or `*.test.ts`
+- **Do not** call a class export as a function — use a static method, e.g. `await vs.Print.print("hi")` not `vs.Print("hi")`
+- **`import type { App } from "obsidian"`** is erased at compile time; for IDE types, add a local `tsconfig.json` + `devDependencies.obsidian` under your scripts folder (types only, not required at runtime)
+- **Third-party npm packages** are not officially supported in MVP
+
+### Example: report class
+
+```typescript
+export class ProjectReport {
+  static render(container: HTMLElement, context: { title?: string } = {}): void {
+    container.empty();
+    container.createEl('h3', { text: context.title ?? 'Report' });
+  }
 }
 ```
 
-If you have multiple URLs, you can also do:
+### Example: invoke command
 
-```json
-{
-    "fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com",
-        "GitHub Sponsor": "https://github.com/sponsors",
-        "Patreon": "https://www.patreon.com/"
-    }
+```typescript
+import { Notice } from 'obsidian';
+
+export class CreateProject {
+  static async invoke(app: import('obsidian').App): Promise<void> {
+    void app;
+    new Notice('CreateProject invoked');
+  }
 }
 ```
 
-## API Documentation
+## Settings
 
-See https://github.com/obsidianmd/obsidian-api
+| Option                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| **Scripts root**      | Vault-relative folder containing `src/`         |
+| **Auto watch**        | Rebuild when source files change (desktop only) |
+| **Show build notice** | Notice when compilation fails                   |
+
+**Resolved paths** shows the computed `src` and `dist` directories.
+
+## Commands
+
+| Command                             | Description                          |
+| ----------------------------------- | ------------------------------------ |
+| **Vault Scripts: Rebuild & reload** | Full rebuild (desktop only)          |
+| **Vault Scripts: {ExportName}**     | Runs `static invoke` for that export |
+
+## Platform notes
+
+|                  | Desktop          | Mobile                             |
+| ---------------- | ---------------- | ---------------------------------- |
+| Compile / watch  | Yes              | No                                 |
+| Call `window.vs` | Yes              | Yes (after Sync)                   |
+| Empty `dist/`    | Build on desktop | Notice: build on PC and sync first |
+
+After Sync updates `dist/` on mobile, the plugin reindexes automatically.
+
+## Troubleshooting
+
+| Issue                         | Check                                                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop compile fails         | Confirm `.obsidian/plugins/vault-scripts/esbuild-wasm/` exists; unzip the full release zip or copy the entire `dist/` from `pnpm run build` |
+| `vs` is undefined             | Plugin enabled? Reload Obsidian                                                                                                             |
+| `VS_EXPORT_NOT_FOUND`         | `dist/` missing or stale — **Rebuild & reload** on desktop                                                                                  |
+| `VS_EXPORT_CONFLICT`          | Two entries export the same name — rename one                                                                                               |
+| Class constructor error       | Use static methods: `await vs.X.method()`, not `vs.X()`                                                                                     |
+| IDE type errors on `obsidian` | Add `tsconfig.json` + `obsidian` types under scripts root (see above)                                                                       |
+
+## Development (plugin)
+
+```bash
+pnpm install
+pnpm run dev      # watch build → dist/
+pnpm run test
+pnpm run lint
+```
+
+Plugin source lives in `src/`. User script examples: [fixtures/](./fixtures/).
+
+## License
+
+MIT
