@@ -10,6 +10,7 @@ import {
 	runEsbuildBuild,
 	type EsbuildPaths,
 } from "./esbuild-runner";
+import { isEsbuildServiceDead, restartEsbuildWasm } from "./esbuild-init";
 import type {
 	BuildEndListener,
 	BuildResult,
@@ -34,8 +35,18 @@ export class CompileService {
 		correlationId: string;
 		resolve: (result: BuildResult) => void;
 	} | undefined;
+	private buildLock: Promise<void> = Promise.resolve();
 
 	constructor(private readonly options: CompileServiceOptions) {}
+
+	private async withBuildLock<T>(fn: () => Promise<T>): Promise<T> {
+		const run = this.buildLock.then(fn);
+		this.buildLock = run.then(
+			() => undefined,
+			() => undefined,
+		);
+		return run;
+	}
 
 	private watchEnabled = false;
 
@@ -48,14 +59,16 @@ export class CompileService {
 			return;
 		}
 
-		this.watchEnabled = Boolean(options.watch);
+		await this.withBuildLock(async () => {
+			this.watchEnabled = Boolean(options.watch);
 
-		if (options.watch) {
-			await this.startWatch();
-			return;
-		}
+			if (options.watch) {
+				await this.startWatch();
+				return;
+			}
 
-		await this.rebuild();
+			await this.rebuildUnlocked();
+		});
 	}
 
 	hasWatchContext(): boolean {
@@ -71,7 +84,7 @@ export class CompileService {
 		if (!this.canCompile() || !this.watchEnabled) {
 			return;
 		}
-		await this.startWatch();
+		await this.withBuildLock(() => this.startWatch());
 	}
 
 	async rebuild(): Promise<BuildResult | undefined> {
@@ -79,15 +92,35 @@ export class CompileService {
 			return undefined;
 		}
 
+		return this.withBuildLock(() => this.rebuildUnlocked());
+	}
+
+	private async rebuildUnlocked(): Promise<BuildResult | undefined> {
 		const correlationId = crypto.randomUUID();
 
 		if (this.context) {
+			let resolvePending!: (result: BuildResult) => void;
 			const resultPromise = new Promise<BuildResult>((resolve) => {
+				resolvePending = resolve;
 				this.pendingRebuild = { correlationId, resolve };
 			});
 			try {
 				await this.context.rebuild();
-			} catch {
+			} catch (error) {
+				if (isEsbuildServiceDead(error)) {
+					console.warn(
+						`${LOG_PREFIX} esbuild watch service died, falling back to one-shot build…`,
+						error,
+					);
+					await restartEsbuildWasm();
+					const staleContext = this.context;
+					this.context = undefined;
+					this.pendingRebuild = { correlationId, resolve: resolvePending };
+					if (staleContext) {
+						await staleContext.dispose().catch(() => undefined);
+					}
+					return this.executeBuild(correlationId);
+				}
 				// esbuild throws when errors.length > 0; onEnd still emits BuildResult.
 			}
 			return resultPromise;

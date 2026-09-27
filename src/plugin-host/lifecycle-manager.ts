@@ -1,7 +1,7 @@
 import { TAbstractFile, TFile } from 'obsidian';
 
 import { CompileService } from '~/compile';
-import { configureEsbuildPluginRoot } from '~/compile/esbuild-init';
+import { prepareEsbuildForLoad, stopEsbuildWasm } from '~/compile/esbuild-init';
 import { toAbsoluteVaultPath } from '~/compile/vault-paths';
 import { isPathUnder, joinPath, resolvePaths } from '~/paths';
 import { createRuntime, type RuntimeServices } from '~/runtime';
@@ -43,7 +43,9 @@ export class LifecycleManager {
   private mobileDistListenersRegistered = false;
 
   async onload(plugin: VaultScriptsPluginHost): Promise<void> {
-    configureEsbuildPluginRoot(toAbsoluteVaultPath(plugin.app.vault, plugin.manifest.dir ?? ''));
+    await prepareEsbuildForLoad(
+      toAbsoluteVaultPath(plugin.app.vault, plugin.manifest.dir ?? ''),
+    );
 
     this.settingsStore = new SettingsStore(plugin);
     const settings = await this.settingsStore.load();
@@ -94,7 +96,10 @@ export class LifecycleManager {
   }
 
   onunload(): void {
-    void this.compile?.dispose();
+    void (async () => {
+      await this.compile?.dispose();
+      await stopEsbuildWasm().catch(() => undefined);
+    })();
     this.compile = undefined;
     this.commands?.unregisterAll();
     this.commands = undefined;

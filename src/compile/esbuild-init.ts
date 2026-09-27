@@ -7,6 +7,15 @@ type EsbuildWasm = typeof import("esbuild-wasm");
 let pluginRootAbsolute: string | undefined;
 let initPromise: Promise<EsbuildWasm> | undefined;
 
+export function isEsbuildServiceDead(error: unknown): boolean {
+	const msg = error instanceof Error ? error.message : String(error);
+	return (
+		msg.includes("service is no longer running") ||
+		msg.includes("service was stopped") ||
+		msg.includes("EPIPE")
+	);
+}
+
 /**
  * Must be called from Plugin.onload before any compile.
  * @param absolutePluginRoot — filesystem path to the plugin folder (not vault-relative).
@@ -14,6 +23,19 @@ let initPromise: Promise<EsbuildWasm> | undefined;
 export function configureEsbuildPluginRoot(absolutePluginRoot: string): void {
 	pluginRootAbsolute = absolutePluginRoot;
 	initPromise = undefined;
+}
+
+/** Stop any prior esbuild child process, then configure plugin root (Plugin.onload). */
+export async function prepareEsbuildForLoad(
+	absolutePluginRoot: string,
+): Promise<void> {
+	await restartEsbuildWasm();
+	pluginRootAbsolute = absolutePluginRoot;
+}
+
+export async function restartEsbuildWasm(): Promise<void> {
+	await stopEsbuildWasm().catch(() => undefined);
+	resetEsbuildWasmState();
 }
 
 function loadEsbuildModule(absolutePluginRoot: string): EsbuildWasm {

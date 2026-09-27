@@ -1,6 +1,11 @@
 import type * as esbuild from "esbuild-wasm";
+import {
+	getEsbuildWasm,
+	isEsbuildServiceDead,
+	restartEsbuildWasm,
+} from "./esbuild-init";
 import { OBSIDIAN_EXTERNALS } from "./externals";
-import { getEsbuildWasm } from "./esbuild-init";
+import { LOG_PREFIX } from "~/shared/constants";
 
 export interface EsbuildPaths {
 	entryAbsPaths: string[];
@@ -36,29 +41,48 @@ export function createEsbuildOptions(
 	};
 }
 
+async function withEsbuildRetry<T>(
+	operation: (esbuild: typeof import("esbuild-wasm")) => Promise<T>,
+): Promise<T> {
+	try {
+		const esbuild = await getEsbuildWasm();
+		return await operation(esbuild);
+	} catch (error) {
+		if (!isEsbuildServiceDead(error)) {
+			throw error;
+		}
+		console.warn(`${LOG_PREFIX} esbuild service died, restarting…`, error);
+		await restartEsbuildWasm();
+		const esbuild = await getEsbuildWasm();
+		return operation(esbuild);
+	}
+}
+
 export async function runEsbuildBuild(
 	paths: EsbuildPaths,
 ): Promise<esbuild.BuildResult> {
-	const esbuild = await getEsbuildWasm();
-	return esbuild.build(createEsbuildOptions(paths));
+	return withEsbuildRetry((esbuild) =>
+		esbuild.build(createEsbuildOptions(paths)),
+	);
 }
 
 export async function createEsbuildContext(
 	paths: EsbuildPaths,
 	onEnd: (result: esbuild.BuildResult) => void | Promise<void>,
 ): Promise<esbuild.BuildContext> {
-	const esbuild = await getEsbuildWasm();
-	return esbuild.context({
-		...createEsbuildOptions(paths),
-		plugins: [
-			{
-				name: "vault-scripts-on-end",
-				setup(build) {
-					build.onEnd((result) => {
-						void onEnd(result);
-					});
+	return withEsbuildRetry((esbuild) =>
+		esbuild.context({
+			...createEsbuildOptions(paths),
+			plugins: [
+				{
+					name: "vault-scripts-on-end",
+					setup(build) {
+						build.onEnd((result) => {
+							void onEnd(result);
+						});
+					},
 				},
-			},
-		],
-	});
+			],
+		}),
+	);
 }
